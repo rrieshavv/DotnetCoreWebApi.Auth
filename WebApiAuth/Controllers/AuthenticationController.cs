@@ -54,7 +54,13 @@ namespace WebApiAuth.Controllers
                 // Assign a role
                 await _userManager.AddToRoleAsync(user, role);
 
-                return StatusCode(StatusCodes.Status201Created, new Response { Status = "Success", Message = "User created successfully!" });
+                // add token to verify the account
+                var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+                var confirmationLink = Url.Action(nameof(ConfirmEmail), "Authentication", new { token, email = user.Email }, Request.Scheme);
+                var message = new Message(new string[] { user.Email! }, "Email confirmation link", confirmationLink!);
+                _emailService.SendEmail(message);
+
+                return StatusCode(StatusCodes.Status201Created, new Response { Status = "Success", Message = "User created successfully & account confirmation email sent.!" });
             }
             else
             {
@@ -62,13 +68,19 @@ namespace WebApiAuth.Controllers
             }
         }
 
-        [HttpGet]
-        public IActionResult TestEmail()
+        [HttpGet("ConfirmEmail")]
+        public async Task<IActionResult> ConfirmEmail(string token, string email)
         {
-            var message = new Message(new string[] { "mail.rishavkarna@gmail.com" }, "Test", "<h1>Hello from asp.net core</h1>");
-
-            _emailService.SendEmail(message);
-            return StatusCode(StatusCodes.Status200OK, new Response { Status = "Success", Message = "Email sent successfully!" });
+            var user = await _userManager.FindByEmailAsync(email);
+            if (user != null)
+            {
+                var result = await _userManager.ConfirmEmailAsync(user, token);
+                if (result.Succeeded)
+                {
+                    return StatusCode(StatusCodes.Status200OK, new Response { Status = "Success", Message = "Email verified successfully!" });
+                }
+            }
+            return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "This user doesnot exist!" });
         }
 
     }
