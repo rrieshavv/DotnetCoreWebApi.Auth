@@ -1,9 +1,14 @@
 ﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Identity.Client;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using Web.Service.Models;
 using Web.Service.Services;
 using WebApiAuth.Models;
+using WebApiAuth.Models.Authentication.Login;
 using WebApiAuth.Models.Authentication.SignUp;
 
 namespace WebApiAuth.Controllers
@@ -15,13 +20,16 @@ namespace WebApiAuth.Controllers
         private readonly UserManager<IdentityUser> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly IEmailService _emailService;
+        private readonly IConfiguration _configuration;
 
         public AuthenticationController(UserManager<IdentityUser> userManager,
-            RoleManager<IdentityRole> roleManager, IEmailService emailService)
+            RoleManager<IdentityRole> roleManager, IEmailService emailService
+            , IConfiguration configuration)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _emailService = emailService;
+            _configuration = configuration;
         }
 
         [HttpPost]
@@ -81,6 +89,63 @@ namespace WebApiAuth.Controllers
                 }
             }
             return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "This user doesnot exist!" });
+        }
+
+
+        [HttpPost]
+        [Route("login")]
+        public async Task<IActionResult> Login([FromBody] LoginModel loginModel)
+        {
+            // check the user...
+            var user = await _userManager.FindByNameAsync(loginModel.Username);
+
+            // check the password
+
+            if (user != null && await _userManager.CheckPasswordAsync(user, loginModel.Password))
+            {
+                // claim list creation
+                var authClaims = new List<Claim>
+                {
+                    new Claim(ClaimTypes.Name, user.UserName),
+                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                };
+
+                // add roles to the list
+                var userRoles = await _userManager.GetRolesAsync(user);
+
+                foreach(var role in userRoles)
+                {
+                    authClaims.Add(new Claim(ClaimTypes.Role, role));
+                }
+
+                // generate the token with the claims
+                var jwtToken = GetToken(authClaims);
+
+                // return the token
+                return Ok(new
+                {
+                    token = new JwtSecurityTokenHandler().WriteToken(jwtToken),
+                    expiration = jwtToken.ValidTo
+                });
+            }
+
+            return Unauthorized();
+        }
+
+
+        private JwtSecurityToken GetToken(List<Claim> authClaims)
+        {
+            var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Secret"]));
+
+            var token = new JwtSecurityToken(
+                issuer: _configuration["JWT:ValidIssuer"],
+                audience: _configuration["JWT:ValidAudience"],
+                expires: DateTime.Now.AddDays(2),
+                claims: authClaims,
+                signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
+                );
+
+            return token;
         }
 
     }
