@@ -48,6 +48,7 @@ namespace WebApiAuth.Controllers
                 Email = registerUser.Email,
                 SecurityStamp = Guid.NewGuid().ToString(),
                 UserName = registerUser.UserName,
+                TwoFactorEnabled = true
             };
 
             if (await _roleManager.RoleExistsAsync(role))
@@ -113,9 +114,16 @@ namespace WebApiAuth.Controllers
                 // add roles to the list
                 var userRoles = await _userManager.GetRolesAsync(user);
 
-                foreach(var role in userRoles)
+                foreach (var role in userRoles)
                 {
                     authClaims.Add(new Claim(ClaimTypes.Role, role));
+                }
+
+                if (user.TwoFactorEnabled)
+                {
+                    // TODO ----->
+                    return StatusCode(StatusCodes.Status201Created, new Response { Status = "Success", Message = $"We have sent an OTP to your Email {user.Email}" });
+
                 }
 
                 // generate the token with the claims
@@ -125,7 +133,8 @@ namespace WebApiAuth.Controllers
                 return Ok(new
                 {
                     token = new JwtSecurityTokenHandler().WriteToken(jwtToken),
-                    expiration = jwtToken.ValidTo
+                    expiration = jwtToken.ValidTo,
+                    user = user.UserName
                 });
             }
 
