@@ -18,18 +18,21 @@ namespace WebApiAuth.Controllers
     public class AuthenticationController : ControllerBase
     {
         private readonly UserManager<IdentityUser> _userManager;
+        private readonly SignInManager<IdentityUser> _signInManager;
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly IEmailService _emailService;
         private readonly IConfiguration _configuration;
 
         public AuthenticationController(UserManager<IdentityUser> userManager,
-            RoleManager<IdentityRole> roleManager, IEmailService emailService
+            RoleManager<IdentityRole> roleManager, IEmailService emailService,
+            SignInManager<IdentityUser> signInManager
             , IConfiguration configuration)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _emailService = emailService;
             _configuration = configuration;
+            _signInManager = signInManager;
         }
 
         [HttpPost]
@@ -100,6 +103,21 @@ namespace WebApiAuth.Controllers
             // check the user...
             var user = await _userManager.FindByNameAsync(loginModel.Username);
 
+            if (user.TwoFactorEnabled)
+            {
+                await _signInManager.SignOutAsync();
+                await _signInManager.PasswordSignInAsync(user, loginModel.Password, false, true);
+
+
+                var token = await _userManager.GenerateTwoFactorTokenAsync(user, "Email");
+                var message = new Message(new string[] { user.Email! }, "OTP Confirmation", token);
+                _emailService.SendEmail(message);
+
+                return StatusCode(StatusCodes.Status201Created,
+                    new Response { Status = "Success", Message = $"We have sent an OTP to your Email {user.Email}" });
+
+            }
+
             // check the password
 
             if (user != null && await _userManager.CheckPasswordAsync(user, loginModel.Password))
@@ -119,12 +137,7 @@ namespace WebApiAuth.Controllers
                     authClaims.Add(new Claim(ClaimTypes.Role, role));
                 }
 
-                if (user.TwoFactorEnabled)
-                {
-                    // TODO ----->
-                    return StatusCode(StatusCodes.Status201Created, new Response { Status = "Success", Message = $"We have sent an OTP to your Email {user.Email}" });
-
-                }
+                
 
                 // generate the token with the claims
                 var jwtToken = GetToken(authClaims);
@@ -141,6 +154,50 @@ namespace WebApiAuth.Controllers
             return Unauthorized();
         }
 
+        [HttpPost]
+        [Route("login-2FA")]
+        public async Task<IActionResult> LoginWithOTP(string code, string username)
+        {
+            var user = await _userManager.FindByNameAsync(username);
+
+            var signIn = await _signInManager.TwoFactorSignInAsync("Email", code, false, false);
+            if (signIn.Succeeded)
+            {
+                if (user != null)
+                {
+                    // claim list creation
+                    var authClaims = new List<Claim>
+                {
+                    new Claim(ClaimTypes.Name, user.UserName),
+                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                };
+
+                    // add roles to the list
+                    var userRoles = await _userManager.GetRolesAsync(user);
+
+                    foreach (var role in userRoles)
+                    {
+                        authClaims.Add(new Claim(ClaimTypes.Role, role));
+                    }
+
+
+
+                    // generate the token with the claims
+                    var jwtToken = GetToken(authClaims);
+
+                    // return the token
+                    return Ok(new
+                    {
+                        token = new JwtSecurityTokenHandler().WriteToken(jwtToken),
+                        expiration = jwtToken.ValidTo,
+                        user = user.UserName
+                    });
+                }
+
+            }
+            return StatusCode(StatusCodes.Status404NotFound,
+                new Response { Status = "Fail", Message = "Invalid  token" });
+        }
 
         private JwtSecurityToken GetToken(List<Claim> authClaims)
         {
