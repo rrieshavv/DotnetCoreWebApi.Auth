@@ -25,6 +25,9 @@ builder.Services.Configure<IdentityOptions>(
     opts => opts.SignIn.RequireConfirmedEmail = true
 );
 
+// Add config for the reset password (for token lifespan)
+builder.Services.Configure<DataProtectionTokenProviderOptions>(
+    opts => opts.TokenLifespan = TimeSpan.FromHours(10));
 
 builder.Services.AddAuthentication(options =>
 {
