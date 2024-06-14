@@ -25,6 +25,9 @@ builder.Services.Configure<IdentityOptions>(
     opts => opts.SignIn.RequireConfirmedEmail = true
 );
 
+// Add config for the reset password (for token lifespan)
+builder.Services.Configure<DataProtectionTokenProviderOptions>(
+    opts => opts.TokenLifespan = TimeSpan.FromHours(10));
 
 builder.Services.AddAuthentication(options =>
 {
@@ -50,6 +53,7 @@ var emailConfig = builder.Configuration.GetSection("EmailConfiguration").Get<Ema
 builder.Services.AddSingleton(emailConfig);
 
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IUserManagement, UserManagement>();
 
 // Add services to the container.
 
