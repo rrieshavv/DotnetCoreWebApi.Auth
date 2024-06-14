@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace WebApiAuth.Models.Authentication.SignUp
+namespace Web.Service.Models.Authentication.SignUp
 {
     public class RegisterUser
     {
@@ -12,5 +12,8 @@ namespace WebApiAuth.Models.Authentication.SignUp
 
         [Required(ErrorMessage = "Password is required.")]
         public string? Password { get; set; }
+
+        [Required(ErrorMessage = "Role is required.")]
+        public string Role { get; set; }
     }
 }

@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace WebApiAuth.Models.Authentication.SignUp
+namespace Web.Service.Models.Authentication.SignUp
 {
     public class ResetPassword
     {
