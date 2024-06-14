@@ -1,8 +1,10 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using MailKit.Net.Imap;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Org.BouncyCastle.Asn1.Ocsp;
 using Web.Service.Models;
 using Web.Service.Models.Authentication.SignUp;
+using Web.Service.Models.Authentication.User;
 
 namespace Web.Service.Services
 {
@@ -23,14 +25,35 @@ namespace Web.Service.Services
             _signInManager = signInManager;
         }
 
+        public async Task<ApiResponse<List<string>>> AssignRoleToUserAsync(List<string> roles, IdentityUser user)
+        {
+            var assignedRole = new List<string>();
+            foreach(var role in roles)
+            {
+                if (await _roleManager.RoleExistsAsync(role))
+                {
+                    if(!await _userManager.IsInRoleAsync(user, role))
+                    {
+                        await _userManager.AddToRoleAsync(user, role);
+                        assignedRole.Add(role);
+                    }
+                }
+            }
+            return new ApiResponse<List<string>> { 
+                isSuccess = true, 
+                StatusCode = 200, 
+                Message = "Roles has been assigned successfully.", 
+                Response = assignedRole 
+            };
+        }
 
-        public async Task<ApiResponse<string>> CreateUserWithTokenAsync(RegisterUser registerUser)
+        public async Task<ApiResponse<CreateUserResponse>> CreateUserWithTokenAsync(RegisterUser registerUser)
         {
             // Check user exist
             var userExists = await _userManager.FindByEmailAsync(registerUser.Email);
             if (userExists != null)
             {
-                return new ApiResponse<string> { isSuccess = false, StatusCode = 403, Message = "User already exists"};
+                return new ApiResponse<CreateUserResponse> { isSuccess = false, StatusCode = 403, Message = "User already exists"};
             }
 
             // Add the user in the database
@@ -42,31 +65,16 @@ namespace Web.Service.Services
                 TwoFactorEnabled = true
             };
 
-            if (await _roleManager.RoleExistsAsync(registerUser.Role))
+            var result = await _userManager.CreateAsync(user, registerUser.Password!);
+
+            if (result.Succeeded)
             {
-                var result = await _userManager.CreateAsync(user, registerUser.Password);
-
-                if (!result.Succeeded)
-                {
-                return new ApiResponse<string> { isSuccess = false, StatusCode = 500, Message = "User failed to create."};
-                }
-
-                // Assign a role
-                await _userManager.AddToRoleAsync(user, registerUser.Role);
-
-                // add token to verify the account
                 var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
-
-                //var confirmationLink = Url.Action(nameof(ConfirmEmail), "Authentication", new { token, email = user.Email }, Request.Scheme);
-                //var message = new Message(new string[] { user.Email! }, "Email confirmation link", confirmationLink!);
-                //_emailService.SendEmail(message);
-
-                return new ApiResponse<string> { isSuccess = true, StatusCode = 201, Message = "User created successfully.", Response=token };
+                return new ApiResponse<CreateUserResponse> { Response = new CreateUserResponse() { User= user, Token = token}, isSuccess = true, StatusCode = 201, Message = "User Created." };
             }
             else
             {
-                return new ApiResponse<string> { isSuccess = false, StatusCode = 500, Message = "Entered Role doesn't exist." };
-
+                return new ApiResponse<CreateUserResponse> { isSuccess = false, StatusCode = 500, Message = "User failed to create." };
             }
         }
     }

@@ -42,15 +42,20 @@ namespace WebApiAuth.Controllers
         public async Task<IActionResult> Register([FromBody] RegisterUser registerUser)
         {
 
-            var token = await _user.CreateUserWithTokenAsync(registerUser);
+            var tokenResponse = await _user.CreateUserWithTokenAsync(registerUser);
 
+            if (tokenResponse.isSuccess)
+            {
+                await _user.AssignRoleToUserAsync(registerUser.Roles, tokenResponse.Response.User);
 
-            var confirmationLink = Url.Action(nameof(ConfirmEmail), "Authentication", new { token, email = registerUser.Email }, Request.Scheme);
-            var message = new Message(new string[] { registerUser.Email! }, "Email confirmation link", confirmationLink!);
-            _emailService.SendEmail(message);
+                var confirmationLink = Url.Action(nameof(ConfirmEmail), "Authentication", new { tokenResponse.Response.Token, email = registerUser.Email }, Request.Scheme);
+                var message = new Message(new string[] { registerUser.Email! }, "Email confirmation link", confirmationLink!);
+                _emailService.SendEmail(message);
 
-            return StatusCode(StatusCodes.Status200OK, new Response { Status = "Success", Message = "User register successfully!" });
+                return StatusCode(StatusCodes.Status200OK, new Response {  Message = "User register successfully!", IsSuccess=true });
 
+            }
+            return StatusCode(StatusCodes.Status500InternalServerError, new Response { Message = tokenResponse.Message, IsSuccess=false });
         }
 
         [HttpGet("ConfirmEmail")]
