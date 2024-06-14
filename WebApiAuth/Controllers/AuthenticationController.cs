@@ -52,10 +52,10 @@ namespace WebApiAuth.Controllers
                 var message = new Message(new string[] { registerUser.Email! }, "Email confirmation link", confirmationLink!);
                 _emailService.SendEmail(message);
 
-                return StatusCode(StatusCodes.Status200OK, new Response {  Message = "User register successfully!", IsSuccess=true });
+                return StatusCode(StatusCodes.Status200OK, new Response { Message = "User register successfully!", IsSuccess = true });
 
             }
-            return StatusCode(StatusCodes.Status500InternalServerError, new Response { Message = tokenResponse.Message, IsSuccess=false });
+            return StatusCode(StatusCodes.Status500InternalServerError, new Response { Message = tokenResponse.Message, IsSuccess = false });
         }
 
         [HttpGet("ConfirmEmail")]
@@ -78,56 +78,63 @@ namespace WebApiAuth.Controllers
         [Route("login")]
         public async Task<IActionResult> Login([FromBody] LoginModel loginModel)
         {
-            // check the user...
-            var user = await _userManager.FindByNameAsync(loginModel.Username);
-
-            if (user.TwoFactorEnabled)
+            var loginOtpResponse = await _user.GetOTPByLoginAsync(loginModel);
+            if (loginOtpResponse.Response != null)
             {
-                await _signInManager.SignOutAsync();
-                await _signInManager.PasswordSignInAsync(user, loginModel.Password, false, true);
+                var user = loginOtpResponse.Response.User;
+                if (user.TwoFactorEnabled)
+                {
+                    var token = loginOtpResponse.Response.Token;
+                    var message = new Message(new string[] { user.Email! }, "OTP Confirmation", loginOtpResponse.Response.Token);
+                    _emailService.SendEmail(message);
 
+                    return StatusCode(StatusCodes.Status201Created,
+                        new Response
+                        {
+                            IsSuccess = loginOtpResponse.isSuccess,
+                            Status = "Success",
+                            Message = $"We have sent an OTP to your Email {user.Email}"
+                        });
 
-                var token = await _userManager.GenerateTwoFactorTokenAsync(user, "Email");
-                var message = new Message(new string[] { user.Email! }, "OTP Confirmation", token);
-                _emailService.SendEmail(message);
+                }
 
-                return StatusCode(StatusCodes.Status201Created,
-                    new Response { Status = "Success", Message = $"We have sent an OTP to your Email {user.Email}" });
+                // check the password
 
-            }
-
-            // check the password
-
-            if (user != null && await _userManager.CheckPasswordAsync(user, loginModel.Password))
-            {
-                // claim list creation
-                var authClaims = new List<Claim>
+                if (user != null && await _userManager.CheckPasswordAsync(user, loginModel.Password))
+                {
+                    // claim list creation
+                    var authClaims = new List<Claim>
                 {
                     new Claim(ClaimTypes.Name, user.UserName),
                     new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
                 };
 
-                // add roles to the list
-                var userRoles = await _userManager.GetRolesAsync(user);
+                    // add roles to the list
+                    var userRoles = await _userManager.GetRolesAsync(user);
 
-                foreach (var role in userRoles)
-                {
-                    authClaims.Add(new Claim(ClaimTypes.Role, role));
+                    foreach (var role in userRoles)
+                    {
+                        authClaims.Add(new Claim(ClaimTypes.Role, role));
+                    }
+
+
+
+                    // generate the token with the claims
+                    var jwtToken = GetToken(authClaims);
+
+                    // return the token
+                    return Ok(new
+                    {
+                        token = new JwtSecurityTokenHandler().WriteToken(jwtToken),
+                        expiration = jwtToken.ValidTo,
+                        user = user.UserName
+                    });
                 }
 
-                
-
-                // generate the token with the claims
-                var jwtToken = GetToken(authClaims);
-
-                // return the token
-                return Ok(new
-                {
-                    token = new JwtSecurityTokenHandler().WriteToken(jwtToken),
-                    expiration = jwtToken.ValidTo,
-                    user = user.UserName
-                });
             }
+
+            // check the user...
+
 
             return Unauthorized();
         }
@@ -186,7 +193,7 @@ namespace WebApiAuth.Controllers
             if (user != null)
             {
                 var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-                var forgotPasswordLink = Url.Action(nameof(ResetPassword),"Authentication", new { token, email=user.Email}, Request.Scheme);
+                var forgotPasswordLink = Url.Action(nameof(ResetPassword), "Authentication", new { token, email = user.Email }, Request.Scheme);
 
                 var message = new Message(new string[] { user.Email! }, "Forgot password link", forgotPasswordLink!);
                 _emailService.SendEmail(message);
@@ -219,14 +226,14 @@ namespace WebApiAuth.Controllers
         [Route("reset-password")]
         public async Task<IActionResult> ResetPassword(ResetPassword resetPassword)
         {
-            var user  = await _userManager.FindByEmailAsync(resetPassword.Email);
+            var user = await _userManager.FindByEmailAsync(resetPassword.Email);
 
-            if(user != null)
+            if (user != null)
             {
                 var resetPassResult = await _userManager.ResetPasswordAsync(user, resetPassword.Token, resetPassword.Password);
-                if(!resetPassResult.Succeeded)
+                if (!resetPassResult.Succeeded)
                 {
-                    foreach(var error in resetPassResult.Errors)
+                    foreach (var error in resetPassResult.Errors)
                     {
                         ModelState.AddModelError(error.Code, error.Description);
                     }

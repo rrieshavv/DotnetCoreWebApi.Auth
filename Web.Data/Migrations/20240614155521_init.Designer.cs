@@ -3,17 +3,20 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using WebApiAuth.Models;
+using Web.Data.Models;
 
 #nullable disable
 
-namespace WebApiAuth.Migrations
+namespace Web.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20240614155521_init")]
+    partial class init
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -51,21 +54,21 @@ namespace WebApiAuth.Migrations
                     b.HasData(
                         new
                         {
-                            Id = "ac3c6123-6978-4cb3-bda6-4883babc270a",
+                            Id = "006a9929-0716-4d58-93b8-c50b724d1349",
                             ConcurrencyStamp = "1",
                             Name = "Admin",
                             NormalizedName = "Admin"
                         },
                         new
                         {
-                            Id = "f4b237eb-5240-42e7-b014-916a3d23d227",
+                            Id = "d1bb9cc5-269a-46bc-8d94-452daa72da13",
                             ConcurrencyStamp = "2",
                             Name = "User",
                             NormalizedName = "User"
                         },
                         new
                         {
-                            Id = "f5a6cbcb-00a0-4623-a8c7-680e36756160",
+                            Id = "ceaddc45-7643-4a36-a2cc-5ff36de4115d",
                             ConcurrencyStamp = "3",
                             Name = "HR",
                             NormalizedName = "HR"
